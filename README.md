@@ -350,4 +350,4 @@ root@adam: pcs resource create vip ocf:cicely:vip op start timeout=60 op stop ti
 - Resolve the issue that forces to have a different script in each node.
 - Parametrize into [OCF](https://en.wikipedia.org/wiki/Open_Cluster_Framework) way
 - Improve the monitor system.
-- [Don't repeat yourself" (DRY)](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) or **duplication is evil**
+- [Don't repeat yourself (DRY)](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) or **duplication is evil**
