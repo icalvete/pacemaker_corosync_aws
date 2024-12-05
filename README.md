@@ -218,7 +218,9 @@ Se crea un fichero con el nombre **vip** en **/usr/lib/ocf/resource.d/cicely**
 : ${OCF_ROOT=/usr/lib/ocf}
 : ${OCF_FUNCTIONS_DIR=${OCF_ROOT}/lib/heartbeat}
 . ${OCF_FUNCTIONS_DIR}/ocf-shellfuncs
-OCF_RESKEY_status_op="monitor"
+
+OCF_RESKEY_ip_default=""
+OCF_RESKEY_eni_default=""
 
 ENI_ID=i-00000000000
 TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 3600")
@@ -231,24 +233,32 @@ meta_data() {
 <!DOCTYPE resource-agent SYSTEM "ra-api-1.dtd">
 <resource-agent name="mi-recurso-personalizado">
   <version>1.0</version>
-  <longdesc lang="es">
-    Recurso personalizado para mi aplicación específica
-  </longdesc>
-  <shortdesc lang="es">Mi recurso personalizado</shortdesc>
-  <parameters>
-    <parameter name="status_op" unique="0">
-      <longdesc lang="es">
-        Operación de monitoreo personalizada
-      </longdesc>
-      <shortdesc lang="es">Operación de monitoreo</shortdesc>
-      <content type="string" default="monitor"/>
-    </parameter>
-  </parameters>
-  <actions>
-    <action name="start" timeout="20s"/>
-    <action name="stop" timeout="20s"/>
-    <action name="monitor" timeout="20s" interval="10s"/>
-    <action name="meta-data" timeout="5s"/>
+  <longdesc lang="en">
+  Resource Agent to move IP addresses within a VPC of the Amazon Webservices EC2
+  by changing an detach / attach an ENI
+
+  Credentials needs to be setup by running "aws configure", or by using AWS Policies.
+
+  See https://aws.amazon.com/cli/ for more information about awscli.
+</longdesc>
+<shortdesc lang="en">Move IP within a VPC of the AWS EC2</shortdesc>
+<parameters>
+  <parameter name="ip" required="1">
+    <longdesc lang="en">VPC private IP address</longdesc>
+    <shortdesc lang="en">VPC private IP</shortdesc>
+    <content type="string" default="${OCF_RESKEY_ip_default}" />
+  </parameter>
+  <parameter name="eni" required="1">
+    <longdesc lang="en">ENI that provide the IP</longdesc>
+    <shortdesc lang="en">ENI</shortdesc>
+    <content type="string" default="${OCF_RESKEY_eni_default}" />
+  </parameter>
+</parameters>
+<actions>
+  <action name="start" timeout="20s"/>
+  <action name="stop" timeout="20s"/>
+  <action name="monitor" timeout="20s" interval="10s"/>
+  <action name="meta-data" timeout="5s"/>
   </actions>
 </resource-agent>
 END
@@ -350,7 +360,6 @@ root@adam: pcs resource create vip ocf:cicely:vip op start timeout=60 op stop ti
 ```
 
 #TODO (Ordered by priority)
-- Parametrize into [OCF](https://en.wikipedia.org/wiki/Open_Cluster_Framework) way
 - Improve the monitor system.
 - [Don't repeat yourself (DRY)](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) or **duplication is evil**
 - Allow instances in different subnets
