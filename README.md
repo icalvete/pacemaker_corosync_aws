@@ -221,11 +221,11 @@ Se crea un fichero con el nombre **vip** en **/usr/lib/ocf/resource.d/cicely**
 
 OCF_RESKEY_ip_default=""
 OCF_RESKEY_eni_default=""
+: ${OCF_RESKEY_ip=${OCF_RESKEY_ip_default}}
+: ${OCF_RESKEY_eni=${OCF_RESKEY_eni_default}}
 
-ENI_ID=i-00000000000
 TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 3600")
 INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
-VIP=192.168.1.3
 
 meta_data() {
     cat <<END
@@ -266,7 +266,7 @@ END
 
 start() {
     # Getting the Attach ID
-    attachment_id=$(aws ec2 describe-network-interfaces --network-interface-ids $ENI_ID --query 'NetworkInterfaces[0].Attachment.AttachmentId' --output text)
+    attachment_id=$(aws ec2 describe-network-interfaces --network-interface-ids $OCF_RESKEY_eni --query 'NetworkInterfaces[0].Attachment.AttachmentId' --output text)
 
     # If Attach ID, detach the ENI from whereever is.
     if [ "$attachment_id" == "None" ]; then
@@ -277,7 +277,7 @@ start() {
     fi
 
     # Attach the ENI to this node instance.
-    aws ec2 attach-network-interface --network-interface-id $ENI_ID --instance-id $INSTANCE_ID --device-index 1
+    aws ec2 attach-network-interface --network-interface-id $OCF_RESKEY_eni --instance-id $INSTANCE_ID --device-index 1
     sleep 10
 
     if [ $? -eq 0 ]; then
@@ -289,7 +289,7 @@ start() {
 
 stop() {
     # Getting the Attach ID
-    attachment_id=$(aws ec2 describe-network-interfaces --network-interface-ids $ENI_ID --query 'NetworkInterfaces[0].Attachment.AttachmentId' --output text)
+    attachment_id=$(aws ec2 describe-network-interfaces --network-interface-ids $OCF_RESKEY_eni --query 'NetworkInterfaces[0].Attachment.AttachmentId' --output text)
 
     # If Attach ID, detach the ENI from whereever is.
     if [ "$attachment_id" == "None" ]; then
@@ -308,7 +308,7 @@ stop() {
 
 monitor() {
     # Super simple way to monitor de VIP
-    ifconfig | grep $VIP
+    ifconfig | grep $OCF_RESKEY_ip
 
     if [ $? -eq 0 ]; then
         return $OCF_SUCCESS
