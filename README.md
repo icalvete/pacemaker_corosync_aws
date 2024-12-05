@@ -4,6 +4,9 @@
 > ESTO ES UNA POC. No es una receta para poner en produccion.
 > Pero funciona. Se ha probado con existo y se puede perfeccionar mucho.
 
+> [!IMPORTANT]
+> Esta solucion solo funciona si las maquinas estan en la misma subnet
+
 ## DESCRIPCION
 Receta basica para instalar y configurar un cluster pacemaker / corosync en AWS EC2 en un cluster de dos nodos
 
@@ -218,7 +221,8 @@ Se crea un fichero con el nombre **vip** en **/usr/lib/ocf/resource.d/cicely**
 OCF_RESKEY_status_op="monitor"
 
 ENI_ID=i-00000000000
-INSTANCE_ID=
+TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 3600")
+INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
 VIP=192.168.1.3
 
 meta_data() {
@@ -331,8 +335,7 @@ El valor de **ENI_ID** debe ser el id de la ENI que se creo en los pasos previos
 El valor de **VIP** debe ser el valor que de la IP que se le concede a la ENI anterior
 
 > [!IMPORTANT]
-> El valor de **INSTANCE_ID** es distinto en cada nodo.Es el valir de id de la instancia en la que se ejecuta el cluster.
-> Esto es critico.
+> El valor de **INSTANCE_ID** se obtiene usando los [metadatos de la instancia](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-metadata.html)
 
 Se dan permisos de ejecucion al fichero
 
@@ -347,7 +350,7 @@ root@adam: pcs resource create vip ocf:cicely:vip op start timeout=60 op stop ti
 ```
 
 #TODO (Ordered by priority)
-- Resolve the issue that forces to have a different script in each node.
 - Parametrize into [OCF](https://en.wikipedia.org/wiki/Open_Cluster_Framework) way
 - Improve the monitor system.
 - [Don't repeat yourself (DRY)](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) or **duplication is evil**
+- Allow instances in different subnets
