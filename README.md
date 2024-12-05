@@ -356,10 +356,12 @@ root@adam: chmod 7775 /usr/lib/ocf/resource.d/cicely/vip
 ### Creando el recurso en el cluster
 
 ```bash
-root@adam: pcs resource create vip ocf:cicely:vip op start timeout=60 op stop timeout=60 op monitor interval=10  start-delay=30s
+root@adam: pcs resource create vip ocf:cicely:vip ip=192.168.1.3 eni=i-08888888888888888 op start timeout=60 op stop timeout=60 op monitor interval=10  start-delay=30s
 ```
 
-#TODO (Ordered by priority)
+# TODO (Ordered by priority)
+- Improve logs
+- Improve error management
 - Improve the monitor system.
 - [Don't repeat yourself (DRY)](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) or **duplication is evil**
 - Allow instances in different subnets
