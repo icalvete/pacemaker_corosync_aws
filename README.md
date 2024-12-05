@@ -205,7 +205,7 @@ Se crea una carpeta para la organizacion dentro de la estructura de recursos
 root@adam: mkdir /usr/lib/ocf/resource.d/cicely
 ```
 
-Se crea un fichero con el nombre **vip** en **usr/lib/ocf/resource.d/cicely**
+Se crea un fichero con el nombre **vip** en **/usr/lib/ocf/resource.d/cicely**
 
 ```
 #!/bin/bash
@@ -251,8 +251,10 @@ END
 }
 
 start() {
+    # Getting the Attach ID
     attachment_id=$(aws ec2 describe-network-interfaces --network-interface-ids $ENI_ID --query 'NetworkInterfaces[0].Attachment.AttachmentId' --output text)
 
+    # If Attach ID, detach the ENI from whereever is.
     if [ "$attachment_id" == "None" ]; then
       echo "La variable tiene el valor None"
     else
@@ -260,6 +262,7 @@ start() {
       sleep 15
     fi
 
+    # Attach the ENI to this node instance.
     aws ec2 attach-network-interface --network-interface-id $ENI_ID --instance-id $INSTANCE_ID --device-index 1
     sleep 10
 
@@ -271,8 +274,10 @@ start() {
 }
 
 stop() {
+    # Getting the Attach ID
     attachment_id=$(aws ec2 describe-network-interfaces --network-interface-ids $ENI_ID --query 'NetworkInterfaces[0].Attachment.AttachmentId' --output text)
 
+    # If Attach ID, detach the ENI from whereever is.
     if [ "$attachment_id" == "None" ]; then
       echo "La variable tiene el valor None"
     else
@@ -288,6 +293,7 @@ stop() {
 }
 
 monitor() {
+    # Super simple way to monitor de VIP
     ifconfig | grep $VIP
 
     if [ $? -eq 0 ]; then
@@ -338,5 +344,10 @@ root@adam: chmod 7775 /usr/lib/ocf/resource.d/cicely/vip
 
 ```bash
 root@adam: pcs resource create vip ocf:cicely:vip op start timeout=60 op stop timeout=60 op monitor interval=10  start-delay=30s
-
 ```
+
+#TODO (Ordered by priority)
+- Resolve the issue that forces to have a different script in each node.
+- Parametrize into [OCF](https://en.wikipedia.org/wiki/Open_Cluster_Framework) way
+- Improve the monitor system.
+- [Don't repeat yourself" (DRY)](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) or **duplication is evil**
