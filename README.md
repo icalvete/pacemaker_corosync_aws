@@ -31,6 +31,7 @@ Writing corosync key to /etc/corosync/authkey.
 ```
 
 ### Configuracion de corosync (cluster)
+
 ```bash
 # Please read the corosync.conf.5 manual page
 system {
@@ -114,6 +115,8 @@ nodelist {
 	}
 }
 ```
+> [!CAUTION]
+> los valores de atributo name de la seccion nodelist deben poderse resover via **DNS** o **/etc/hosts** file en los dos nodos.
 
 ## Configuracion de SecurityGroups
 Abrir puertos UDP:
@@ -155,3 +158,18 @@ El paquete **fence-agents-aws** instalado y el aws cli instalado y configurado c
     ]
 }
 ```
+
+### Creacion de los recursos
+Se crean los recursos
+
+```bash
+root@adam: pcs stonith create aws-fence-adam fence_aws region=eu-west-1 access_key=ACCESS_KEY secret_key=SECRET_KEY plug=ID_INSTANCIA_NODE_1
+root@adam: pcs stonith create aws-fence-eva fence_aws region=eu-west-1 access_key=ACCESS_KEY secret_key=SECRET_KEY plug=ID_INSTANCIA_NODE_2
+```
+
+Se crean las constraints para asegurarse que cada fence se ejecuta solo en su nodo.
+
+```bash
+root@adam: pcs constraint location aws-fence-adam prefers adam=INFINITY
+root@adam: pcs constraint location aws-fence-eva prefers eva=INFINITY
+  ```
