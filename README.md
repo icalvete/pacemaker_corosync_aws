@@ -131,3 +131,27 @@ Ese mecanismo se encarga de matar de manera fulminante un nodo en caso de discre
 
 ### Requisitos.
 El paquete **fence-agents-aws** instalado y el aws cli instalado y configurado con unas credencias con estos permisos.
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ec2:DescribeInstances",
+                "ec2:StopInstances",
+                "ec2:StartInstances",
+                "ec2:DescribeNetworkInterfaces",
+                "ec2:DescribeInstances",
+                "ec2:AttachNetworkInterface",
+                "ec2:DetachNetworkInterface",
+                "ec2:AssignPrivateIpAddresses",
+                "ec2:UnassignPrivateIpAddresses",
+                "ec2:ModifyNetworkInterfaceAttribute"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+```
