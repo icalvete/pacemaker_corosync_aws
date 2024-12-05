@@ -2,9 +2,13 @@
 
 > [!IMPORTANT]
 > ESTO ES UNA POC. No es una receta para poner en produccion.
+> Pero funciona. Se ha probado con existo y se puede perfeccionar mucho.
 
 ## DESCRIPCION
 Receta basica para instalar y configurar un cluster pacemaker / corosync en AWS EC2 en un cluster de dos nodos
+
+Contiene un unico recurso. Una VIP que se desplaza entre los nodos a voluntad o en caso de fallo de uno de ellos.
+**Todo se basa en mover una ENI de una instancia a otra.**
 
 ## Paquetes
 Paquetes necesario basicos para ejecutar y configuar el cluster.
@@ -49,7 +53,7 @@ totem {
 	# Corosync itself works without a cluster name, but DLM needs one.
 	# The cluster name is also written into the VG metadata of newly
 	# created shared LVM volume groups, if lvmlockd uses DLM locking.
-        cluster_name: fluzo_logs
+        cluster_name: cicely
 
 	# crypto_cipher and crypto_hash: Used for mutual node authentication.
 	# If you choose to enable this, then do remember to create a shared
@@ -105,7 +109,7 @@ nodelist {
 		# Cluster membership node identifier
 		nodeid: 1
 		# Address of first link
-		ring0_addr: 192.168.1.11
+		ring0_addr: 192.168.1.1
 	}
 
 	node {
@@ -177,7 +181,7 @@ root@adam: pcs constraint location aws-fence-adam prefers adam=INFINITY
 root@adam: pcs constraint location aws-fence-eva prefers eva=INFINITY
   ```
 
-## configuracion del recursos AWS VIP
+## Configuracion del recursos AWS VIP
 Para resolver el problema de crear un recursos VIP (Virtual IP) en AWS se va a seguir la siguiente estrategia
 
 - Crear una [ENI](https://docs.aws.amazon.com/es_es/AWSEC2/latest/UserGuide/using-eni.html)
@@ -191,4 +195,148 @@ Con esos datos se crear un recurso custom que mueve la [ENI](https://docs.aws.am
 > Se han probado [awsvip](https://github.com/ClusterLabs/resource-agents/blob/main/heartbeat/awsvip) y [aws-vpc-move-ip](https://github.com/ClusterLabs/resource-agents/blob/main/heartbeat/aws-vpc-move-ip) pero no encajan del todo y ademas tienen bastantes bugs
 
 
+### Preparando el recurso custom
+> [!WARNING]
+> Las siguientes instrucciones se ejecutan en los dos nodos.
 
+Se crea una carpeta para la organizacion dentro de la estructura de recursos
+
+```bash
+root@adam: mkdir /usr/lib/ocf/resource.d/cicely
+```
+
+Se crea un fichero con el nombre **vip** en **usr/lib/ocf/resource.d/cicely**
+
+```
+#!/bin/bash
+
+# Script de recurso personalizado para Pacemaker
+
+: ${OCF_ROOT=/usr/lib/ocf}
+: ${OCF_FUNCTIONS_DIR=${OCF_ROOT}/lib/heartbeat}
+. ${OCF_FUNCTIONS_DIR}/ocf-shellfuncs
+OCF_RESKEY_status_op="monitor"
+
+ENI_ID=i-00000000000
+INSTANCE_ID=
+VIP=192.168.1.3
+
+meta_data() {
+    cat <<END
+<?xml version="1.0"?>
+<!DOCTYPE resource-agent SYSTEM "ra-api-1.dtd">
+<resource-agent name="mi-recurso-personalizado">
+  <version>1.0</version>
+  <longdesc lang="es">
+    Recurso personalizado para mi aplicación específica
+  </longdesc>
+  <shortdesc lang="es">Mi recurso personalizado</shortdesc>
+  <parameters>
+    <parameter name="status_op" unique="0">
+      <longdesc lang="es">
+        Operación de monitoreo personalizada
+      </longdesc>
+      <shortdesc lang="es">Operación de monitoreo</shortdesc>
+      <content type="string" default="monitor"/>
+    </parameter>
+  </parameters>
+  <actions>
+    <action name="start" timeout="20s"/>
+    <action name="stop" timeout="20s"/>
+    <action name="monitor" timeout="20s" interval="10s"/>
+    <action name="meta-data" timeout="5s"/>
+  </actions>
+</resource-agent>
+END
+}
+
+start() {
+    attachment_id=$(aws ec2 describe-network-interfaces --network-interface-ids $ENI_ID --query 'NetworkInterfaces[0].Attachment.AttachmentId' --output text)
+
+    if [ "$attachment_id" == "None" ]; then
+      echo "La variable tiene el valor None"
+    else
+      aws ec2 detach-network-interface --attachment-id $attachment_id
+      sleep 15
+    fi
+
+    aws ec2 attach-network-interface --network-interface-id $ENI_ID --instance-id $INSTANCE_ID --device-index 1
+    sleep 10
+
+    if [ $? -eq 0 ]; then
+        return $OCF_SUCCESS
+    else
+        return $OCF_ERR_GENERIC
+    fi
+}
+
+stop() {
+    attachment_id=$(aws ec2 describe-network-interfaces --network-interface-ids $ENI_ID --query 'NetworkInterfaces[0].Attachment.AttachmentId' --output text)
+
+    if [ "$attachment_id" == "None" ]; then
+      echo "La variable tiene el valor None"
+    else
+      aws ec2 detach-network-interface --attachment-id $attachment_id
+      sleep 15
+    fi
+
+    if [ $? -eq 0 ]; then
+        return $OCF_SUCCESS
+    else
+        return $OCF_ERR_GENERIC
+    fi
+}
+
+monitor() {
+    ifconfig | grep $VIP
+
+    if [ $? -eq 0 ]; then
+        return $OCF_SUCCESS
+    else
+        return $OCF_NOT_RUNNING
+    fi
+}
+
+case $__OCF_ACTION in
+    meta-data)
+        meta_data
+        exit $OCF_SUCCESS
+        ;;
+    start)
+        start
+        exit $?
+        ;;
+    stop)
+        stop
+        exit $?
+        ;;
+    monitor)
+        monitor
+        exit $?
+        ;;
+    *)
+        echo "Uso: $0 {start|stop|monitor|meta-data}"
+        exit $OCF_ERR_UNIMPLEMENTED
+        ;;
+esac
+```
+
+El valor de **ENI_ID** debe ser el id de la ENI que se creo en los pasos previos.
+El valor de **VIP** debe ser el valor que de la IP que se le concede a la ENI anterior
+
+> [!IMPORTANT]
+> El valor de **INSTANCE_ID** es distinto en cada nodo.Es el valir de id de la instancia en la que se ejecuta el cluster.
+> Esto es critico.
+
+Se dan permisos de ejecucion al fichero
+
+```bash
+root@adam: chmod 7775 /usr/lib/ocf/resource.d/cicely/vip
+```
+
+### Creando el recurso en el cluster
+
+```bash
+root@adam: pcs resource create vip ocf:cicely:vip op start timeout=60 op stop timeout=60 op monitor interval=10  start-delay=30s
+
+```
