@@ -240,25 +240,25 @@ meta_data() {
   Credentials needs to be setup by running "aws configure", or by using AWS Policies.
 
   See https://aws.amazon.com/cli/ for more information about awscli.
-</longdesc>
-<shortdesc lang="en">Move IP within a VPC of the AWS EC2</shortdesc>
-<parameters>
-  <parameter name="ip" required="1">
-    <longdesc lang="en">VPC private IP address</longdesc>
-    <shortdesc lang="en">VPC private IP</shortdesc>
-    <content type="string" default="${OCF_RESKEY_ip_default}" />
-  </parameter>
-  <parameter name="eni" required="1">
-    <longdesc lang="en">ENI that provide the IP</longdesc>
-    <shortdesc lang="en">ENI</shortdesc>
-    <content type="string" default="${OCF_RESKEY_eni_default}" />
-  </parameter>
-</parameters>
-<actions>
-  <action name="start" timeout="20s"/>
-  <action name="stop" timeout="20s"/>
-  <action name="monitor" timeout="20s" interval="10s"/>
-  <action name="meta-data" timeout="5s"/>
+  </longdesc>
+  <shortdesc lang="en">Move IP within a VPC of the AWS EC2</shortdesc>
+  <parameters>
+    <parameter name="ip" required="1">
+      <longdesc lang="en">VPC private IP address</longdesc>
+      <shortdesc lang="en">VPC private IP</shortdesc>
+      <content type="string" default="${OCF_RESKEY_ip_default}" />
+    </parameter>
+    <parameter name="eni" required="1">
+      <longdesc lang="en">ENI that provide the IP</longdesc>
+      <shortdesc lang="en">ENI</shortdesc>
+      <content type="string" default="${OCF_RESKEY_eni_default}" />
+    </parameter>
+  </parameters>
+  <actions>
+    <action name="start" timeout="20s"/>
+    <action name="stop" timeout="20s"/>
+    <action name="monitor" timeout="20s" interval="10s"/>
+    <action name="meta-data" timeout="5s"/>
   </actions>
 </resource-agent>
 END
@@ -364,4 +364,4 @@ root@adam: pcs resource create vip ocf:cicely:vip ip=192.168.1.3 eni=i-088888888
 - Improve error management
 - Improve the monitor system.
 - [Don't repeat yourself (DRY)](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) or **duplication is evil**
-- Allow instances in different subnets
+- Allow instances in different subnets (if is posible)
