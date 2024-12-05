@@ -1,5 +1,8 @@
 # CLUSTER PACEMAKER / COROSYNC EN AWS EC2
 
+> [!IMPORTANT]
+> ESTO ES UNA POC. No es una receta para poner en produccion.
+
 ## DESCRIPCION
 Receta basica para instalar y configurar un cluster pacemaker / corosync en AWS EC2 en un cluster de dos nodos
 
@@ -173,3 +176,19 @@ Se crean las constraints para asegurarse que cada fence se ejecuta solo en su no
 root@adam: pcs constraint location aws-fence-adam prefers adam=INFINITY
 root@adam: pcs constraint location aws-fence-eva prefers eva=INFINITY
   ```
+
+## configuracion del recursos AWS VIP
+Para resolver el problema de crear un recursos VIP (Virtual IP) en AWS se va a seguir la siguiente estrategia
+
+- Crear una [ENI](https://docs.aws.amazon.com/es_es/AWSEC2/latest/UserGuide/using-eni.html)
+- Añadirla a una de las instancias
+- Apuntar la IP
+- Apuntar el id de la [ENI](https://docs.aws.amazon.com/es_es/AWSEC2/latest/UserGuide/using-eni.html)
+
+Con esos datos se crear un recurso custom que mueve la [ENI](https://docs.aws.amazon.com/es_es/AWSEC2/latest/UserGuide/using-eni.html) de una instancia a otra
+
+> [!NOTE]
+> Se han probado [awsvip](https://github.com/ClusterLabs/resource-agents/blob/main/heartbeat/awsvip) y [aws-vpc-move-ip](https://github.com/ClusterLabs/resource-agents/blob/main/heartbeat/aws-vpc-move-ip) pero no encajan del todo y ademas tienen bastantes bugs
+
+
+
