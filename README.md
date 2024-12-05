@@ -23,6 +23,18 @@ Paquete para configurqar el STONISH en AWS EC2
 apt install fence-agents-aws
 ```
 
+> [!IMPORTANT]
+> awscli es necesario tanto para el mecanismo de STONISH como para mover la ENI.
+
+> [!IMPORTANT]
+> Ver mas abajo los permisos necesarios del usuario que otorga las credenciales.
+
+> [!IMPORTANT]
+> Se asume que root tiene configurado awscli con un perfil por defecto con unas credenciales con esos permisos.
+```bash
+pip install --upgrade awscli
+```
+
 ## Configuracion de corosync
 Configuracion basica de corosync
 
@@ -126,7 +138,7 @@ nodelist {
 }
 ```
 > [!CAUTION]
-> los valores de atributo name de la seccion nodelist deben poderse resover via **DNS** o **/etc/hosts** file en los dos nodos.
+> los valores de atributo name de la seccion nodelist deben poderse resolver via **DNS** o **/etc/hosts** file en los dos nodos.
 
 ## Configuracion de SecurityGroups
 Abrir puertos UDP:
