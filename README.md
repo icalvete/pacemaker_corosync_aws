@@ -369,7 +369,7 @@ root@adam: chmod 775 /usr/lib/ocf/resource.d/cicely/vip
 ### Creating the final resource
 
 ```bash
-root@adam: pcs resource create vip ocf:cicely:vip op start timeout=60 op stop timeout=60 op monitor interval=10  start-delay=30s
+root@adam: spcs resource create vip ocf:fluzo:vip ip=10.1.1.10 routing_table=rtb-00000000000000
 
 ```
 
