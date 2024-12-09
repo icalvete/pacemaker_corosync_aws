@@ -1,49 +1,34 @@
 # CLUSTER PACEMAKER / COROSYNC EN AWS EC2
 
 > [!IMPORTANT]
-> ESTO ES UNA POC. No es una receta para poner en produccion.
-> Pero funciona. Se ha probado con existo y se puede perfeccionar mucho.
-
-> [!IMPORTANT]
-> Esta solucion solo funciona si las maquinas estan en la misma subnet
+> POC.
+> Work more than fine. But be carefull in production. 
+> There is a lot of improvements to do.
 
 ## DESCRIPCION
-Receta basica para instalar y configurar un cluster pacemaker / corosync en AWS EC2 en un cluster de dos nodos
+Basic recipe to install a two nodes Pacemaker / Corosyc Cluster within AWS EC2 with a VIP able to move between zones
 
-Contiene un unico recurso. Una VIP que se desplaza entre los nodos a voluntad o en caso de fallo de uno de ellos.
-**Todo se basa en mover una ENI de una instancia a otra.**
+**Based on [this article](https://aws.amazon.com/blogs/apn/making-application-failover-seamless-by-failing-over-your-private-virtual-ip-across-availability-zones/)**
 
-## Paquetes
-Paquetes necesario basicos para ejecutar y configuar el cluster.
+## Packages
+Cluster packages.
 ```bash
 apt install pacemaker corosync pcs
 ```
-Paquete para configurqar el STONISH en AWS EC2
+Package to configure STONISH on AWS EC2
 ```bash
 apt install fence-agents-aws
 ```
 
-> [!IMPORTANT]
-> awscli es necesario tanto para el mecanismo de STONISH como para mover la ENI.
+## Corosync configuration
+Basic Corosyn configuration.
 
-> [!IMPORTANT]
-> Ver mas abajo los permisos necesarios del usuario que otorga las credenciales.
-
-> [!IMPORTANT]
-> Se asume que root tiene configurado awscli con un perfil por defecto con unas credenciales con esos permisos.
-```bash
-pip install --upgrade awscli
-```
-
-## Configuracion de corosync
-Configuracion basica de corosync
-
-### Configuracion authkey
-Crear el fichero con corosync-keygen en en nodo1 (crea el fichero en su ubicacion correcta)
-Luego copiarlo al otro nodo.
+### authkey configuration
+Run **corosync-keygen** on nodo1 (The command deliver the auth file at de rigth path.)
+Copy to the node2
 
 > [!CAUTION]
-> Los permisos tienen que ser 400.
+> Permision need to be 400
 
 ```bash
 root@adam:/etc/corosync# corosync-keygen
@@ -52,7 +37,7 @@ Gathering 2048 bits for key from /dev/urandom.
 Writing corosync key to /etc/corosync/authkey.
 ```
 
-### Configuracion de corosync (cluster)
+### Corosync (cluster) configuration
 
 ```bash
 # Please read the corosync.conf.5 manual page
@@ -138,24 +123,25 @@ nodelist {
 }
 ```
 > [!CAUTION]
-> los valores de atributo name de la seccion nodelist deben poderse resolver via **DNS** o **/etc/hosts** file en los dos nodos.
+> Values of name attribute need to be resolved by **DNS** o **/etc/hosts** file on both nodes.
 
-## Configuracion de SecurityGroups
-Abrir puertos UDP:
+## SecurityGroups configuration
+Open UDP ports:
 - 5404
 - 5405
 
-Abrir puerto TCP
+Open TCP port:
 - 2224
 
-## Configuracion del mecanismo de STONISH
-Ese mecanismo se encarga de matar de manera fulminante un nodo en caso de discrepancias de quorum y es critico para evitar el temido "split brain"
+## STONISH Mechanism configuration
+Mechanism to immediately kill a node in case of quorum discrepancies. Critical to avoid the feared "split brain".
 
 > [!IMPORTANT]
-> Esta es la primera de las diferencias de un cluster fuera de AWS EC2. Aqui en mecanismo de STONISH para por usar un producto que da acceso al API de AWS EC2 y de esta forma pedir un shootdown de la instancia afectada.
+> Fisrt singularity of this cluster on AWS EC2. STONISH between is here a sofware with access to AWS EC2 API and so is able to shotdown the instance. 
 
 ### Requisitos.
-El paquete **fence-agents-aws** instalado y el aws cli instalado y configurado con unas credencias con estos permisos.
+
+The package **fence-agents-aws** insttaled and aws cli insttaled and configured with this permisions for the user whose credentials are used by aws cli.
 
 ```json
 {
@@ -165,15 +151,9 @@ El paquete **fence-agents-aws** instalado y el aws cli instalado y configurado c
             "Effect": "Allow",
             "Action": [
                 "ec2:DescribeInstances",
+                "ec2:DescribeInstanceStatus",
                 "ec2:StopInstances",
-                "ec2:StartInstances",
-                "ec2:DescribeNetworkInterfaces",
-                "ec2:DescribeInstances",
-                "ec2:AttachNetworkInterface",
-                "ec2:DetachNetworkInterface",
-                "ec2:AssignPrivateIpAddresses",
-                "ec2:UnassignPrivateIpAddresses",
-                "ec2:ModifyNetworkInterfaceAttribute"
+                "ec2:TerminateInstances"
             ],
             "Resource": "*"
         }
@@ -181,63 +161,81 @@ El paquete **fence-agents-aws** instalado y el aws cli instalado y configurado c
 }
 ```
 
-### Creacion de los recursos
-Se crean los recursos
+### Creating resources
+Creating resources
 
 ```bash
 root@adam: pcs stonith create aws-fence-adam fence_aws region=eu-west-1 access_key=ACCESS_KEY secret_key=SECRET_KEY plug=ID_INSTANCIA_NODE_1
 root@adam: pcs stonith create aws-fence-eva fence_aws region=eu-west-1 access_key=ACCESS_KEY secret_key=SECRET_KEY plug=ID_INSTANCIA_NODE_2
 ```
 
-Se crean las constraints para asegurarse que cada fence se ejecuta solo en su nodo.
+Creating constraints to be sure that any fence runs only on its node
 
 ```bash
 root@adam: pcs constraint location aws-fence-adam prefers adam=INFINITY
 root@adam: pcs constraint location aws-fence-eva prefers eva=INFINITY
   ```
 
-## Configuracion del recursos AWS VIP
-Para resolver el problema de crear un recursos VIP (Virtual IP) en AWS se va a seguir la siguiente estrategia
+## Configuration the resource AWS VIP
 
-- Crear una [ENI](https://docs.aws.amazon.com/es_es/AWSEC2/latest/UserGuide/using-eni.html)
-- Añadirla a una de las instancias
-- Apuntar la IP
-- Apuntar el id de la [ENI](https://docs.aws.amazon.com/es_es/AWSEC2/latest/UserGuide/using-eni.html)
+### Pre Steps
 
-Con esos datos se crear un recurso custom que mueve la [ENI](https://docs.aws.amazon.com/es_es/AWSEC2/latest/UserGuide/using-eni.html) de una instancia a otra
+- Be sure the nodes have [sourcedestcheck](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-networkinterface.html#cfn-ec2-networkinterface-sourcedestcheck)
+
+- Add this new IAM permissions to the user whose credentials are used by aws cli
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ec2:CreateRoute",
+                "ec2:DeleteRoute"
+            ],
+            "Resource": "arn:aws:ec2:*:*:route-table/*"
+        }
+    ]
+}
+```
 
 > [!NOTE]
-> Se han probado [awsvip](https://github.com/ClusterLabs/resource-agents/blob/main/heartbeat/awsvip) y [aws-vpc-move-ip](https://github.com/ClusterLabs/resource-agents/blob/main/heartbeat/aws-vpc-move-ip) pero no encajan del todo y ademas tienen bastantes bugs
+> [awsvip](https://github.com/ClusterLabs/resource-agents/blob/main/heartbeat/awsvip) y [aws-vpc-move-ip](https://github.com/ClusterLabs/resource-agents/blob/main/heartbeat/aws-vpc-move-ip) were imposible to use. I'm not sure why.
 
 
-### Preparando el recurso custom
+### Preparing the custom resource
 > [!WARNING]
-> Las siguientes instrucciones se ejecutan en los dos nodos.
+> Nexts steps need to be done on both nodes
 
-Se crea una carpeta para la organizacion dentro de la estructura de recursos
+Create a folder into the resources structure
 
 ```bash
 root@adam: mkdir /usr/lib/ocf/resource.d/cicely
 ```
 
-Se crea un fichero con el nombre **vip** en **/usr/lib/ocf/resource.d/cicely**
+Create a file named **vip** on **usr/lib/ocf/resource.d/cicely**
 
 ```
 #!/bin/bash
 
 # Script de recurso personalizado para Pacemaker
 
+TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 3600")
+MAC=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/network/interfaces/macs/ | head -n 1 | tr -d '/')
+ENI=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/network/interfaces/macs/${MAC}/interface-id)
+
 : ${OCF_ROOT=/usr/lib/ocf}
 : ${OCF_FUNCTIONS_DIR=${OCF_ROOT}/lib/heartbeat}
 . ${OCF_FUNCTIONS_DIR}/ocf-shellfuncs
 
 OCF_RESKEY_ip_default=""
-OCF_RESKEY_eni_default=""
-: ${OCF_RESKEY_ip=${OCF_RESKEY_ip_default}}
-: ${OCF_RESKEY_eni=${OCF_RESKEY_eni_default}}
+OCF_RESKEY_routing_table_default=""
+OCF_RESKEY_interface_default="ens5"
 
-TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 3600")
-INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
+: ${OCF_RESKEY_ip=${OCF_RESKEY_ip_default}}
+: ${OCF_RESKEY_routing_table=${OCF_RESKEY_routing_table_default}}
+: ${OCF_RESKEY_interface=${OCF_RESKEY_interface_default}}
 
 meta_data() {
     cat <<END
@@ -260,10 +258,15 @@ meta_data() {
       <shortdesc lang="en">VPC private IP</shortdesc>
       <content type="string" default="${OCF_RESKEY_ip_default}" />
     </parameter>
-    <parameter name="eni" required="1">
-      <longdesc lang="en">ENI that provide the IP</longdesc>
-      <shortdesc lang="en">ENI</shortdesc>
-      <content type="string" default="${OCF_RESKEY_eni_default}" />
+    <parameter name="routing_table" required="1">
+      <longdesc lang="en">Name of the routing table(s), where the route for the IP address should be changed. If declaring multiple routing tables they should be separated by comma. Example: rtb-XXXXXXXX,rtb-YYYYYYYYY</longdesc>
+      <shortdesc lang="en">routing table name(s)</shortdesc>
+      <content type="string" default="${OCF_RESKEY_routing_table_default}" />
+    </parameter>
+    <parameter name="interface" required="0">
+      <longdesc lang="en">Name of the network interface, i.e. eth0</longdesc>
+      <shortdesc lang="en">network interface name</shortdesc>
+      <content type="string" default="${OCF_RESKEY_interface_default}" />
     </parameter>
   </parameters>
   <actions>
@@ -277,56 +280,60 @@ END
 }
 
 start() {
-    # Getting the Attach ID
-    attachment_id=$(aws ec2 describe-network-interfaces --network-interface-ids $OCF_RESKEY_eni --query 'NetworkInterfaces[0].Attachment.AttachmentId' --output text)
+        # Deleting route
+        aws ec2 delete-route \
+        --route-table-id ${OCF_RESKEY_routing_table} \
+        --destination-cidr-block ${OCF_RESKEY_ip}/32
 
-    # If Attach ID, detach the ENI from whereever is.
-    if [ "$attachment_id" == "None" ]; then
-      echo "La variable tiene el valor None"
-    else
-      aws ec2 detach-network-interface --attachment-id $attachment_id
-      sleep 15
-    fi
+        sleep 3
 
-    # Attach the ENI to this node instance.
-    aws ec2 attach-network-interface --network-interface-id $OCF_RESKEY_eni --instance-id $INSTANCE_ID --device-index 1
-    sleep 10
+        # Creating route
+        aws ec2 create-route \
+        --route-table-id ${OCF_RESKEY_routing_table} \
+        --destination-cidr-block ${OCF_RESKEY_ip}/32 \
+        --network-interface-id ${ENI}
 
-    if [ $? -eq 0 ]; then
-        return $OCF_SUCCESS
-    else
-        return $OCF_ERR_GENERIC
-    fi
+        sleep 3
+
+        ip addr add ${OCF_RESKEY_ip}/32 dev $OCF_RESKEY_interface
+
+        sleep 3
+
+        if [ $? -eq 0 ]; then
+                return $OCF_SUCCESS
+        else
+                return $OCF_ERR_GENERIC
+        fi
 }
 
 stop() {
-    # Getting the Attach ID
-    attachment_id=$(aws ec2 describe-network-interfaces --network-interface-ids $OCF_RESKEY_eni --query 'NetworkInterfaces[0].Attachment.AttachmentId' --output text)
+        # Deleting route
+        aws ec2 delete-route \
+        --route-table-id ${OCF_RESKEY_routing_table} \
+        --destination-cidr-block ${OCF_RESKEY_ip}/32
 
-    # If Attach ID, detach the ENI from whereever is.
-    if [ "$attachment_id" == "None" ]; then
-      echo "La variable tiene el valor None"
-    else
-      aws ec2 detach-network-interface --attachment-id $attachment_id
-      sleep 15
-    fi
+        sleep 3
 
-    if [ $? -eq 0 ]; then
-        return $OCF_SUCCESS
-    else
-        return $OCF_ERR_GENERIC
-    fi
+        ip addr del ${OCF_RESKEY_ip}/32 dev $OCF_RESKEY_interface
+
+        sleep 3
+
+        if [ $? -eq 0 ]; then
+                return $OCF_SUCCESS
+        else
+                return $OCF_ERR_GENERIC
+        fi
 }
 
 monitor() {
-    # Super simple way to monitor de VIP
-    ifconfig | grep $OCF_RESKEY_ip
+        # Super simple way to monitor de VIP
+         ip addr show | grep $OCF_RESKEY_ip
 
-    if [ $? -eq 0 ]; then
-        return $OCF_SUCCESS
-    else
-        return $OCF_NOT_RUNNING
-    fi
+        if [ $? -eq 0 ]; then
+                return $OCF_SUCCESS
+        else
+                return $OCF_NOT_RUNNING
+        fi
 }
 
 case $__OCF_ACTION in
@@ -353,22 +360,17 @@ case $__OCF_ACTION in
 esac
 ```
 
-El valor de **ENI_ID** debe ser el id de la ENI que se creo en los pasos previos.
-El valor de **VIP** debe ser el valor que de la IP que se le concede a la ENI anterior
-
-> [!IMPORTANT]
-> El valor de **INSTANCE_ID** se obtiene usando los [metadatos de la instancia](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-metadata.html)
-
-Se dan permisos de ejecucion al fichero
+Give execution permisions to the file
 
 ```bash
-root@adam: chmod 7775 /usr/lib/ocf/resource.d/cicely/vip
+root@adam: chmod 775 /usr/lib/ocf/resource.d/cicely/vip
 ```
 
-### Creando el recurso en el cluster
+### Creating the final resource
 
 ```bash
-root@adam: pcs resource create vip ocf:cicely:vip ip=192.168.1.3 eni=i-08888888888888888 op start timeout=60 op stop timeout=60 op monitor interval=10  start-delay=30s
+root@adam: pcs resource create vip ocf:cicely:vip op start timeout=60 op stop timeout=60 op monitor interval=10  start-delay=30s
+
 ```
 
 # TODO (Ordered by priority)
@@ -376,4 +378,3 @@ root@adam: pcs resource create vip ocf:cicely:vip ip=192.168.1.3 eni=i-088888888
 - Improve error management
 - Improve the monitor system.
 - [Don't repeat yourself (DRY)](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) or **duplication is evil**
-- Allow instances in different subnets (if is posible)

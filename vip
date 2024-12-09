@@ -1,0 +1,128 @@
+#!/bin/bash
+
+# Script de recurso personalizado para Pacemaker
+
+: ${OCF_ROOT=/usr/lib/ocf}
+: ${OCF_FUNCTIONS_DIR=${OCF_ROOT}/lib/heartbeat}
+. ${OCF_FUNCTIONS_DIR}/ocf-shellfuncs
+
+OCF_RESKEY_ip_default=""
+OCF_RESKEY_eni_default=""
+: ${OCF_RESKEY_ip=${OCF_RESKEY_ip_default}}
+: ${OCF_RESKEY_eni=${OCF_RESKEY_eni_default}}
+
+TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 3600")
+INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
+
+meta_data() {
+    cat <<END
+<?xml version="1.0"?>
+<!DOCTYPE resource-agent SYSTEM "ra-api-1.dtd">
+<resource-agent name="mi-recurso-personalizado">
+  <version>1.0</version>
+  <longdesc lang="en">
+  Resource Agent to move IP addresses within a VPC of the Amazon Webservices EC2
+  by changing an detach / attach an ENI
+
+  Credentials needs to be setup by running "aws configure", or by using AWS Policies.
+
+  See https://aws.amazon.com/cli/ for more information about awscli.
+  </longdesc>
+  <shortdesc lang="en">Move IP within a VPC of the AWS EC2</shortdesc>
+  <parameters>
+    <parameter name="ip" required="1">
+      <longdesc lang="en">VPC private IP address</longdesc>
+      <shortdesc lang="en">VPC private IP</shortdesc>
+      <content type="string" default="${OCF_RESKEY_ip_default}" />
+    </parameter>
+    <parameter name="eni" required="1">
+      <longdesc lang="en">ENI that provide the IP</longdesc>
+      <shortdesc lang="en">ENI</shortdesc>
+      <content type="string" default="${OCF_RESKEY_eni_default}" />
+    </parameter>
+  </parameters>
+  <actions>
+    <action name="start" timeout="20s"/>
+    <action name="stop" timeout="20s"/>
+    <action name="monitor" timeout="20s" interval="10s"/>
+    <action name="meta-data" timeout="5s"/>
+  </actions>
+</resource-agent>
+END
+}
+
+start() {
+    # Getting the Attach ID
+    attachment_id=$(aws ec2 describe-network-interfaces --network-interface-ids $OCF_RESKEY_eni --query 'NetworkInterfaces[0].Attachment.AttachmentId' --output text)
+
+    # If Attach ID, detach the ENI from whereever is.
+    if [ "$attachment_id" == "None" ]; then
+      echo "La variable tiene el valor None"
+    else
+      aws ec2 detach-network-interface --attachment-id $attachment_id
+      sleep 15
+    fi
+
+    # Attach the ENI to this node instance.
+    aws ec2 attach-network-interface --network-interface-id $OCF_RESKEY_eni --instance-id $INSTANCE_ID --device-index 1
+    sleep 10
+
+    if [ $? -eq 0 ]; then
+        return $OCF_SUCCESS
+    else
+        return $OCF_ERR_GENERIC
+    fi
+}
+
+stop() {
+    # Getting the Attach ID
+    attachment_id=$(aws ec2 describe-network-interfaces --network-interface-ids $OCF_RESKEY_eni --query 'NetworkInterfaces[0].Attachment.AttachmentId' --output text)
+
+    # If Attach ID, detach the ENI from whereever is.
+    if [ "$attachment_id" == "None" ]; then
+      echo "La variable tiene el valor None"
+    else
+      aws ec2 detach-network-interface --attachment-id $attachment_id
+      sleep 15
+    fi
+
+    if [ $? -eq 0 ]; then
+        return $OCF_SUCCESS
+    else
+        return $OCF_ERR_GENERIC
+    fi
+}
+
+monitor() {
+    # Super simple way to monitor de VIP
+    ifconfig | grep $OCF_RESKEY_ip
+
+    if [ $? -eq 0 ]; then
+        return $OCF_SUCCESS
+    else
+        return $OCF_NOT_RUNNING
+    fi
+}
+
+case $__OCF_ACTION in
+    meta-data)
+        meta_data
+        exit $OCF_SUCCESS
+        ;;
+    start)
+        start
+        exit $?
+        ;;
+    stop)
+        stop
+        exit $?
+        ;;
+    monitor)
+        monitor
+        exit $?
+        ;;
+    *)
+        echo "Uso: $0 {start|stop|monitor|meta-data}"
+        exit $OCF_ERR_UNIMPLEMENTED
+        ;;
+esac
